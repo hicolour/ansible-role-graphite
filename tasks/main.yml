@@ -1,0 +1,165 @@
+- name: install required packages for graphite debian/ubuntu
+  apt: pkg={{ item }} state=latest
+  with_items:
+    - graphite-web
+    - graphite-carbon
+  when: ansible_os_family == "Debian"
+
+
+
+- name: restart apache
+  command: chmod -R a+w {{ graphite.local_data_dir }}
+
+- name: restart apache
+  command: mkdir -p /var/lib/graphite/log/webapp/
+
+- name: restart apache
+  command: touch /var/lib/graphite/log/webapp/info.log
+
+- name: restart apache
+  command: chmod -R a+w /var/lib/graphite
+
+
+
+
+
+# GRAPHITE WEBAPP
+
+- name: graphite conf
+  template: src=local_settings.py.j2 dest=/etc/graphite/local_settings.py mode=0644
+
+
+- name: graphite synch db
+  command: graphite-manage syncdb --noinput
+
+
+
+# CARBON
+
+- name: Configure carbon cache
+  template: src=graphite-carbon.j2 dest=/etc/default/graphite-carbon mode=0644
+
+- name: Configure carbon cache
+  template: src=carbon.conf.j2 dest=/etc/carbon/carbon.conf mode=0644
+
+- name: Configure carbon storage schema
+  template: src=storage-schemas.conf.j2 dest=/etc/carbon/storage-schemas.conf mode=0644
+
+- name: Configure carbon storage aggregation
+  template: src=storage-aggregation.conf.j2 dest=/etc/carbon/storage-aggregation.conf mode=0644
+  notify:
+    - restart carbon-cache
+
+
+
+# Apache
+- name: install apache for graphite debian/ubuntu
+  apt: pkg={{ item }} state=latest
+  with_items:
+    - apache2
+    - libapache2-mod-wsgi
+  when: ansible_os_family == "Debian"
+
+- name: disable default virtual host
+  command: a2dissite 000-default
+
+- name: copy graphite virtual host
+  command: cp /usr/share/graphite-web/apache2-graphite.conf /etc/apache2/sites-available
+
+- name: enable default virtual host
+  command: a2ensite apache2-graphite
+
+- name: restart apache
+  command: service apache2 reload
+
+
+
+
+# - name: whisper source
+#   get_url: url=https://github.com/graphite-project/whisper/archive/{{ graphite.version }}.tar.gz dest=/opt/graphite/whisper-{{ graphite.version }}.tar.gz
+
+# - name: unarchive source
+#   command: tar -xvzf /opt/graphite/whisper-{{graphite.version}}.tar.gz chdir=/opt/graphite creates=/opt/graphite/whisper-{{ graphite.version }}
+
+# - name: install whisper
+#   command: ./bin/pip install ./whisper-{{ graphite.version }}/ chdir=/opt/graphite
+
+# # CARBON
+
+# - name: carbon source
+#   get_url: url=https://github.com/graphite-project/carbon/archive/{{ graphite.version }}.tar.gz dest=/opt/graphite/carbon-{{ graphite.version }}.tar.gz
+
+# - name: unarchive source
+#   command: tar -xvzf /opt/graphite/carbon-{{graphite.version}}.tar.gz chdir=/opt/graphite creates=/opt/graphite/carbon-{{ graphite.version }}
+
+# - name: install carbon
+#   command: ./bin/pip install ./carbon-{{ graphite.version }}/ chdir=/opt/graphite
+
+# - name: Configure carbon cache
+#   template: src=carbon.conf.j2 dest=/opt/graphite/conf/carbon.conf mode=0644
+
+# - name: Configure carbon storage schema
+#   template: src=storage-schemas.conf.j2 dest=/opt/graphite/conf/storage-schemas.conf mode=0644
+
+# - name: Configure carbon storage aggregation
+#   template: src=storage-aggregation.conf.j2 dest=/opt/graphite/conf/storage-aggregation.conf mode=0644
+
+# # GRAPHITE WEBAPP
+
+# - name: graphite source
+#   get_url: url=https://github.com/graphite-project/graphite-web/archive/{{ graphite.version }}.tar.gz dest=/opt/graphite/graphite-web-{{ graphite.version }}.tar.gz
+
+# - name: unarchive source
+#   command: tar -xvzf graphite-web-{{ graphite.version }}.tar.gz chdir=/opt/graphite creates=/opt/graphite/graphite-web-{{ graphite.version }}
+
+# - name: install graphite
+#   command: ./bin/pip install ./graphite-web-{{ graphite.version }}/ chdir=/opt/graphite
+
+# - name: graphite conf
+#   template: src=local_settings.py.j2 dest=/opt/graphite/graphite-web-{{ graphite.version }}/webapp/graphite/local_settings.py mode=0644
+
+# - name: graphite log folder
+#   file: state=directory path=/opt/graphite/graphite-web-{{ graphite.version }}/storage/log/webapp
+
+# - name: syncdb for graphite
+#   shell: export PYTHONPATH=/opt/graphite/graphite-web-{{ graphite.version }}/webapp/; /opt/graphite/bin/python /opt/graphite/bin/django-admin.py migrate auth --noinput --settings=graphite.settings
+
+
+# - name: syncdb for graphite
+#   shell: export PYTHONPATH=/opt/graphite/graphite-web-{{ graphite.version }}/webapp/; /opt/graphite/bin/python /opt/graphite/bin/django-admin.py syncdb --noinput --settings=graphite.settings
+
+# SUPERVISOR
+
+# - name: Copy supervisor configuration for graphite
+#   template: src=supervisor-graphite.conf.j2 dest=/etc/supervisor/conf.d/graphite.conf
+#   notify:
+#     - reload supervisor
+
+# NGinx
+
+# - name: Set file permissions
+#   command: /bin/chown -R {{ nginx_user }}:{{ nginx_group }} /opt/graphite
+
+# - name: Copy nginx configuration for graphite
+#   template: src=nginx-graphite.conf.j2 dest=/etc/nginx/sites-available/graphite.conf owner={{ nginx_user }} group={{ nginx_group }}
+
+# - name: generate htpasswd for graphite
+#   when: graphite.nginx_htpasswd is defined
+#   template: src=graphite.htpasswd.j2 dest=/opt/graphite/graphite.htpasswd owner={{ nginx_user }} group={{ nginx_group }}
+
+# - name: Make the SSL directory.
+#   when: graphite.nginx_enable_ssl
+#   file: state=directory path={{ graphite.nginx_ssl_path }} owner={{ nginx_user }} group={{ nginx_group }}
+
+# - name: Upload SSL private Cert
+#   when: graphite.nginx_enable_ssl
+#   copy: src=files/ssl/{{graphite.nginx_ssl_cert}} dest={{graphite.nginx_ssl_path}}/{{graphite.nginx_ssl_cert}} owner={{ nginx_user }} group={{ nginx_group }}
+
+# - name: Upload SSL Key
+#   when: graphite.nginx_enable_ssl
+#   copy: src=files/ssl/{{graphite.nginx_ssl_key}} dest={{graphite.nginx_ssl_path}}/{{graphite.nginx_ssl_key}} owner={{ nginx_user }} group={{ nginx_group }}
+
+# - name: Link nginx configuration for graphite
+#   file: src=/etc/nginx/sites-available/graphite.conf dest=/etc/nginx/sites-enabled/graphite.conf state=link owner={{ nginx_user }} group={{ nginx_group }}
+#   notify:
+#     - restart nginx
